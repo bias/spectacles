@@ -1,24 +1,47 @@
 #!/opt/local/bin/ruby1.9 -w
 
 require 'set'
+# require 'rubygems' 
+# require 'backports' # the big guns if we can't add better to_s to hash ...
 
 class Hash
   def keys_sub other_hash; self.keys.to_set.subset?( other_hash.keys.to_set ) end
+  def values_sub other_hash; self.values.to_set.subset?( other_hash.values.to_set ) end
+  def keyvalue_sub other_hash; keys_sub(other_hash) && values_sub(other_hash) end
 end
 
 # todo consider making edge a hash of hashes
 class Graph
   def initialize; @v_id = 0; @e_id = 0; @vertices = Set.new; @edges = Set.new end
+  def initialize_copy(orig)
+    @vertices = Set.new
+    orig.vertices.each {|v| @vertices << v.dup }
+    @edges = Set.new
+    orig.edges.each {|e| @edges << e.dup }
+  end
   attr_reader :v_id, :e_id, :vertices, :edges
   def order; @vertices.size end
   def size; @edges.size end
   def to_s; 
-    s = "(Vertices["
-    if @vertices.empty? then s << "], Edges[ " else @vertices.each {|v| s << v.to_s+", " } end
-    s.sub!(/\}, $/,"}], Edges[")
-    if @edges.empty? then s << "])" else @edges.each {|e| s << e.to_s+", " } end
-    s.sub(/], $/,"]])")
+    s = "Vertices[\n"
+    if @vertices.empty? then s << "], \nEdges[\n" else @vertices.each {|v| s << v.inspect+", \n" } end
+    s.sub!(/\}, \n$/,"}], \nEdges[\n")
+    if @edges.empty? then s << "]" else @edges.each {|e| s << e.inspect+", \n" } end
+    s.sub(/\], \n$/,"]]")
   end
+  #def _dump(limit); to_s end
+  # def self.dynamic_load(str) 
+  #   edges = false
+  #   str.each_line do |line| 
+  #     if line =~ /^Edges/ then edges = true end
+  #     if edges then
+  #       #
+  #     else
+  #       #
+  #     end
+  #   end
+  #   return Graph.new
+  # end
   def each_vertex; @vertices.each {|v| yield v} end
   def each_edge; @edges.each {|e| yield e} end
   def add_vertex(properties);
@@ -44,6 +67,7 @@ class Graph
     end
     if vset.size == 1 then return vreturn else raise(ArgumentError, "Select hash \'#{select_hash}\' wasn't unique!") end
   end
+  def gv(sh); get_vertex sh end
   def get_vertices(select_hash);
     vset = Set.new;
     each_vertex do |v| 
@@ -61,5 +85,19 @@ class Graph
       (v.merge!(edit_hash); vset << v) if count == 0
     end
     return vset
+  end
+  # gets vertices that match e, for every e, if e has subhash of v
+  def targets v
+    vset = Set.new
+    each_edge {|e| vset |= get_vertices(e[2]) if e[1].keyvalue_sub(v) }
+    return vset
+  end
+  def sources v
+    vset = Set.new
+    each_edge {|e| vset |= get_vertices(e[1]) if e[2].keyvalue_sub(v) }
+    return vset
+  end
+  def connections v
+    return sources(v)|targets(v)
   end
 end
